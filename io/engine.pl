@@ -45,7 +45,7 @@ record :-
     make_ios(200, Ios),
     setup_call_cleanup(open('io/ios.pl', write, S, [encoding(utf8)]),
         ( format(S, "% 200 recorded inputs and outputs (swipl -g record -t halt io/run.pl writes this; check compares).~n", []),
-          forall(member(Io, Ios), format(S, "~q.~n", [Io])) ), close(S)),
+          forall(member(Io, Ios), ( write_term(S, Io, [quoted(true), numbervars(false), ignore_ops(false), spacing(next_argument)]), write(S, '.\n') )) ), close(S)),
     write_text(Ios),
     length(Ios, N), format("~w inputs and outputs written to io/ios.pl and io/ios.txt~n", [N]).
 
@@ -71,7 +71,7 @@ read_saved(Ios) :-
 read_all(S, Xs) :- read_term(S, T, []), ( T == end_of_file -> Xs = [] ; Xs = [T|Ys], read_all(S, Ys) ).
 
 compare_one(io(N, Name, A, O), io(_, _, A2, O2), B0, B) :-
-    ( A =@= A2, O =@= O2 -> B = B0
+    ( A-O =@= A2-O2 -> B = B0
     ; format("Example ~w (~w) changed:~n  recorded ~q -> ~q~n  now      ~q -> ~q~n", [N, Name, A, O, A2, O2]), B is B0 + 1 ).
 
 % Asked "is the output O?" with the recorded O, the predicate must say yes.
