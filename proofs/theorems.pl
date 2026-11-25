@@ -35,3 +35,13 @@ theorem(threshold_one_is_duplicates) :-
 % 5. The tree contains every predicate exactly once.
 theorem(tree_has_every_leaf_once) :-
     forall(named(Ps), ( tree(Ps, T), predtree:leaves(T, L), msort(L, S), pairs_keys(Ps, Ns), msort(Ns, S) )).
+
+% 6. Near similarity is a proper measure too, ignores variable and predicate names, is 1 when the clause sets are
+%    the same, and gives credit for shared goals: clauses differing in one of three goals are 1/2 similar.
+theorem(near_similarity_is_a_proper_measure) :-
+    forall(( pred(A), pred(B) ), ( near_similarity(A, B, S1), near_similarity(B, A, S2), S1 == S2, S1 = N/D, N >= 0, N =< D,
+                                   clause_set(A, SA), clause_set(B, SB), ( SA == SB -> N =:= D ; true ), copy_term(A, A2), near_similarity(A, A2, 1/1) )),
+    near_similarity([(p(X) :- q(X), r(X))], [(p(Y) :- q(Y), s(Y))], 1/2),
+    near_similarity([(len([], 0) :- true), (len([_|T], N) :- len(T, M), N is M + 1)],
+                    [(length_of([], 0) :- true), (length_of([_|T2], N2) :- length_of(T2, M2), N2 is M2 + 1)], 1/1),
+    forall(( named(Ps), member(Th, [0/1, 1/2, 1/1]) ), ( families_near(Ps, Th, Fs), append(Fs, All), msort(All, Srt), pairs_keys(Ps, Ns), msort(Ns, Srt) )).

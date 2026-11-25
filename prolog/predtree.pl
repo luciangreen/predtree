@@ -5,8 +5,9 @@
 % A predicate is Name-Clauses (a list of clause terms).
 %?- similarity([(p(X) :- q(X)), p(a)], [p(b), (p(Y) :- q(Y))], S).        % S = 1/3
 %?- families([a-[p(1)], b-[p(1)], c-[r(2)]], 1/2, F).                      % F = [[a,b],[c]]
+%?- near_similarity([(p(X) :- q(X), r(X))], [(p(Y) :- q(Y), s(Y))], S).   % S = 1/2 (similarity/3 gives 0/1)
 %?- canonical((f(X, Y) :- g(Y, X)), C).                                    % C = (f(A,B) :- g(B,A)) numbered
-:- module(predtree, [canonical/2, clause_set/2, similarity/3, duplicates/2, families/3, tree/2]).
+:- module(predtree, [near_similarity/3, families_near/3, canonical/2, clause_set/2, similarity/3, duplicates/2, families/3, tree/2]).
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 
@@ -17,6 +18,32 @@ clause_set(Cs, S) :- maplist(canonical, Cs, Ks), sort(Ks, S).
 similarity(A, B, S) :- clause_set(A, SA), clause_set(B, SB), ord_intersection(SA, SB, I), ord_union(SA, SB, U),
     length(I, NI), length(U, NU), ( NU =:= 0 -> S = 1/1 ; G is gcd(NI, NU), ( NI =:= 0 -> S = 0/1 ; N is NI // G, D is NU // G, S = N/D ) ).
 frac_ge(N1/D1, N2/D2) :- N1 * D2 >= N2 * D1.
+
+% near_similarity(+Clauses1, +Clauses2, -S): for near duplicates. Each clause is broken into its goals (the
+% head and each body goal, variables named within the clause), the predicate's own name is replaced by self
+% (so len and length_of can match), and S is the Jaccard index of the two sets of goals. Clauses that differ
+% in one goal still share the others: p(X) :- q(X), r(X) and p(Y) :- q(Y), s(Y) give 1/2.
+near_similarity(A, B, S) :- goal_set(A, GA), goal_set(B, GB), ord_intersection(GA, GB, I), ord_union(GA, GB, U),
+    length(I, NI), length(U, NU), ( NU =:= 0 -> S = 1/1 ; NI =:= 0 -> S = 0/1 ; G is gcd(NI, NU), N is NI // G, D is NU // G, S = N/D ).
+goal_set(Cs, S) :- ( Cs = [C0|_], head_of(C0, H0), functor(H0, F, Ar) -> true ; F = none, Ar = 0 ),
+    findall(G, ( member(C, Cs), copy_term(C, K), numbervars(K, 0, _), clause_goals(K, Gs), member(G0, Gs), self_name(G0, F/Ar, G) ), L), sort(L, S).
+head_of((H :- _), H) :- !.
+head_of(H, H).
+clause_goals((H :- B), [H|Gs]) :- !, body_goals(B, Gs).
+clause_goals(H, [H]).
+body_goals((A, B), Gs) :- !, body_goals(A, Ga), body_goals(B, Gb), append(Ga, Gb, Gs).
+body_goals(true, []) :- !.
+body_goals(G, [G]).
+self_name(G, F/Ar, G2) :- ( compound(G), functor(G, F, Ar) -> G =.. [_|As], G2 =.. [self|As] ; G2 = G ).
+
+% families_near(+Preds, +Threshold, -Families): families/3 with near_similarity/3.
+families_near(Ps, T, Fs) :- pairs_keys(Ps, Ns), components_near(Ns, Ps, T, Fs0), maplist(msort, Fs0, Fs1), msort(Fs1, Fs).
+components_near([], _, _, []).
+components_near([N|Ns], Ps, T, [C|Cs]) :- reach_near([N], Ps, T, [N], C), subtract(Ns, C, Rest), components_near(Rest, Ps, T, Cs).
+reach_near([], _, _, Seen, Seen).
+reach_near([N|Q], Ps, T, Seen, C) :- memberchk(N-A, Ps),
+    findall(M, ( member(M-B, Ps), \+ memberchk(M, Seen), near_similarity(A, B, S), frac_ge(S, T) ), New0), sort(New0, New),
+    append(Seen, New, Seen1), append(Q, New, Q1), reach_near(Q1, Ps, T, Seen1, C).
 
 % duplicates(+Preds, -Groups): names whose clause sets are identical (up to variable names), groups of 2+.
 duplicates(Ps, Gs) :- maplist([N-Cs, S-N]>>clause_set(Cs, S), Ps, Ks), msort(Ks, Sorted), group_keys(Sorted, All), include([G]>>(G = [_, _|_]), All, Gs).
